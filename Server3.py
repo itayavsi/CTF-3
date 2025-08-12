@@ -1,461 +1,486 @@
-"""
-CTF Simulation Server Module
-============================
-A comprehensive CTF challenge server implementing 10 different security stages
-"""
-
-import socket
-import threading
-import json
-import base64
 import os
-import time
-import random
-import string
-from flask import Flask, request, render_template_string
-from datetime import datetime
-import subprocess
-import hashlib
+import json
+import sys
+import textwrap
+import base64
 
-class CTFServer:
-    def __init__(self, host='localhost', port=8888):
-        self.host = host
-        self.port = port
-        self.flags = {
-            'stage1': 'CTF{h0st5_f1l3_m4st3r}',
-            'stage2': 'CTF{l0g_4n4ly515_pr0}',
-            'stage3': 'SecretPart123',
-            'stage4': 'CTF{1nj3ct10n_h4ck3r}',
-            'stage5': 'CTF{st3g4n0_n1nj4}',
-            'stage6': 'CTF{c1ph3r_m4st3r}',
-            'stage7': 'CTF{c0nf1g_hunt3r}',
-            'stage8': 'CTF{m3m0ry_f0r3ns1cs}',
-            'stage9': 'CTF{r3v3rs3_3ng1n33r}',
-            'final': 'CTF{f1n4l_ch4mp10n_2024}'
-        }
-        self.user_progress = {}
-        self.setup_challenges()
-        
-    def setup_challenges(self):
-        """Set up all challenge files and data"""
-        # Create directories
-        os.makedirs('ctf_data/logs', exist_ok=True)
-        os.makedirs('ctf_data/files', exist_ok=True)
-        os.makedirs('ctf_data/binary', exist_ok=True)
-        
-        self.setup_stage1()
-        self.setup_stage2()
-        self.setup_stage3()
-        self.setup_stage4()
-        self.setup_stage5()
-        self.setup_stage6()
-        self.setup_stage7()
-        self.setup_stage8()
-        self.setup_stage9()
-        
-    def setup_stage1(self):
-        """Stage 1: Hosts file manipulation"""
-        # Create a simple web server for secret.ctf.local
-        self.flask_app = Flask(__name__)
-        
-        @self.flask_app.route('/')
-        def stage1_flag():
-            if request.headers.get('Host') == 'secret.ctf.local':
-                return f"<h1>Congratulations!</h1><p>Flag: {self.flags['stage1']}</p>"
-            return "<h1>Access Denied</h1><p>Invalid host header</p>", 403
-            
-    def setup_stage2(self):
-        """Stage 2: Log analysis"""
-        log_content = []
-        # Generate 1000 noise log entries
-        for i in range(1000):
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            level = random.choice(['INFO', 'DEBUG', 'WARN', 'ERROR'])
-            message = random.choice([
-                'User login successful',
-                'Database connection established',
-                'Cache cleared',
-                'Session expired',
-                'Request processed',
-                'System health check passed'
-            ])
-            log_content.append(f"[{timestamp}] {level}: {message}")
-        
-        # Insert the flag at a random position
-        flag_pos = random.randint(100, 900)
-        log_content.insert(flag_pos, f"[2024-06-10 15:42:33] ERROR: Authentication failed for user admin - Debug info: {self.flags['stage2']}")
-        
-        with open('ctf_data/logs/application.log', 'w') as f:
-            f.write('\n'.join(log_content))
-    
-    def setup_stage3(self):
-        """Stage 3: Registry simulation (file-based for cross-platform)"""
-        registry_data = {
-            "HKEY_CURRENT_USER": {
-                "SOFTWARE": {
-                    "CTF_Simulation": {
-                        "SecretKeyPart1": self.flags['stage3'],
-                        "Version": "1.0",
-                        "InstallDate": "2024-06-10"
-                    }
-                }
-            }
-        }
-        
-        with open('ctf_data/registry_sim.json', 'w') as f:
-            json.dump(registry_data, f, indent=2)
-    
-    def setup_stage4(self):
-        """Stage 4: Web injection vulnerability"""
-        # This will be handled in the Flask app
-        @self.flask_app.route('/search', methods=['GET', 'POST'])
-        def vulnerable_search():
-            if request.method == 'POST':
-                query = request.form.get('query', '')
-                # Simple SSTI vulnerability
-                if '{{' in query and '}}' in query:
-                    try:
-                        # Simulate template injection
-                        if 'flag' in query.lower():
-                            return f"Search result: {self.flags['stage4']}"
-                    except:
-                        pass
-                return f"Search results for: {query}"
-            
-            return '''
-            <html>
-            <body>
-                <h2>Search System</h2>
-                <form method="post">
-                    <input type="text" name="query" placeholder="Enter search term">
-                    <input type="submit" value="Search">
-                </form>
-                <p><i>Hint: Try template injection with {{flag}}</i></p>
-            </body>
-            </html>
-            '''
-    
-    def setup_stage5(self):
-        """Stage 5: Steganography"""
-        # Create a text file with hidden message using whitespace
-        visible_text = """Welcome to the CTF Challenge!
-        
-This is a normal looking text file.
-Nothing suspicious here at all.
-Just some regular content for you to read.
 
-Good luck with the challenges ahead!"""
-        
-        # Hide flag in whitespace (spaces vs tabs)
-        flag = self.flags['stage5']
-        binary_flag = ''.join(format(ord(c), '08b') for c in flag)
-        
-        hidden_text = ""
-        for i, char in enumerate(visible_text):
-            hidden_text += char
-            if char == ' ' and i < len(binary_flag):
-                # Use tab for 1, space for 0
-                if i < len(binary_flag) and binary_flag[i] == '1':
-                    hidden_text += '\t'
-        
-        with open('ctf_data/files/message.txt', 'w') as f:
-            f.write(hidden_text)
-    
-    def setup_stage6(self):
-        """Stage 6: Vigenère cipher"""
-        key = "SECRET"
-        plaintext = self.flags['stage6']
-        
-        def vigenere_encrypt(text, key):
-            result = ""
-            key_index = 0
-            for char in text:
-                if char.isalpha():
-                    shift = ord(key[key_index % len(key)]) - ord('A')
-                    if char.isupper():
-                        result += chr((ord(char) - ord('A') + shift) % 26 + ord('A'))
-                    else:
-                        result += chr((ord(char) - ord('a') + shift) % 26 + ord('a'))
-                    key_index += 1
+
+PROGRESS_FILE = "progress.json"
+
+LEVEL_FLAGS = {
+    1: "FLAG{level1_hidden_in_dotfile}",
+    2: "FLAG{level2_udp_ping}",
+    3: "FLAG{level3_every_7th_char}",
+    4: "FLAG{level4_port_auth}",
+    5: "FLAG{level5_eval_escape}",
+    6: "FLAG{level6_hidden_route}",
+    7: "FLAG{level7_reverse_protocol}",
+    8: "FLAG{level8_injection_demo}",
+    9: "FLAG{level9_proxy_log}",
+    10: "FLAG{level10_cipher_puzzle}",
+    11: "FLAG{level11_checksum_exploit}",
+    15: "FLAG{level15_unpickle_trick}",
+}
+
+def save_progress(current_level, solved_levels):
+    data = {"current_level": current_level, "solved": solved_levels}
+    with open(PROGRESS_FILE, "w") as f:
+        json.dump(data, f)
+
+def load_progress():
+    if os.path.exists(PROGRESS_FILE):
+        try:
+            with open(PROGRESS_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("current_level", 1), set(data.get("solved", []))
+        except Exception:
+            pass
+    return 1, set()
+
+def input_prompt(prompt="> "):
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        print("\nGoodbye.")
+        sys.exit(0)
+    except KeyboardInterrupt:
+        print("\nGoodbye.")
+        sys.exit(0)
+
+def require_flag(level, solved_levels):
+    print("\nEnter the flag to mark level solved (or type 'back' to return):")
+    while True:
+        ans = input_prompt()
+        if ans.lower() == "back":
+            return False
+        if ans == LEVEL_FLAGS[level]:
+            print("Correct! Level solved.")
+            solved_levels.add(level)
+            return True
+        else:
+            print("Not correct. Try again or type 'back'.")
+
+#############################################
+# Level implementations (interactive minis) #
+#############################################
+
+def level1_interactive(solved_levels):
+    print("\n=== Level 1: Hello, Root (file-discovery) ===")
+    print("Goal: find the hidden dot-file containing the flag.\n")
+    print("You are dropped into a directory. Try commands: ls, ls -a, cat <filename>, help, flag\n")
+    files = {"readme.txt": "Welcome to Level 1.\nFind the hidden file.\n"}
+    hidden = {".secret_hidden": LEVEL_FLAGS[1] + "\n"}
+    while True:
+        cmd = input_prompt()
+        if cmd == "help":
+            print("ls         - list visible files\nls -a      - list all files (including hidden)\ncat <file> - display file contents\nflag       - submit flag\nexit       - quit level")
+        elif cmd == "ls":
+            print("\n".join(sorted(files.keys())))
+        elif cmd == "ls -a":
+            all_files = list(files.keys()) + list(hidden.keys())
+            print("\n".join(sorted(all_files)))
+        elif cmd.startswith("cat "):
+            fname = cmd.split(" ",1)[1]
+            if fname in files:
+                print(files[fname])
+            elif fname in hidden:
+                print(hidden[fname])
+            else:
+                print("No such file")
+        elif cmd == "flag":
+            solved = require_flag(1, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'help'.")
+
+def level2_interactive(solved_levels):
+    print("\n=== Level 2: Ping of Destiny (simulated UDP exchange) ===")
+    print("Goal: speak to the UDP service in the right order to receive the flag.")
+    print("Commands: send <MSG>, state, hint, flag, exit")
+    state = {"stage": 0}
+    while True:
+        cmd = input_prompt()
+        if cmd == "help" or cmd == "hint":
+            print("You must send HELLO first, then PINGME. Example: send HELLO")
+        elif cmd.startswith("send "):
+            msg = cmd.split(" ",1)[1].strip()
+            if state["stage"] == 0 and msg == "HELLO":
+                state["stage"] = 1
+                print("ACK")
+            elif state["stage"] == 1 and msg == "PINGME":
+                print("Service:", LEVEL_FLAGS[2])
+                # prompt to submit flag
+            else:
+                print("Service: NOPE")
+        elif cmd == "state":
+            print("Internal stage:", state["stage"])
+        elif cmd == "flag":
+            solved = require_flag(2, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for guidance.")
+
+def level3_interactive(solved_levels):
+    print("\n=== Level 3: Hidden in Plain Sight (steganography) ===")
+    print("Goal: extract the hidden flag in the text by taking every Nth character.\nCommands: show, extract <n>, hint, flag, exit")
+    # create a long text with flag every 7th character
+    base = "This is a long innocuous-looking text used for level 3. " * 20
+    n = 7
+    slot = list(base)
+    flag = LEVEL_FLAGS[3]
+    for i, ch in enumerate(flag):
+        pos = (i+1)*n - 1
+        if pos < len(slot):
+            slot[pos] = ch
+        else:
+            slot.extend([" "]*(pos-len(slot)+1))
+            slot[pos] = ch
+    text = "".join(slot)
+    while True:
+        cmd = input_prompt()
+        if cmd == "show":
+            print(textwrap.fill(text[:500], width=80) + ("\n..."))
+        elif cmd.startswith("extract "):
+            try:
+                nn = int(cmd.split()[1])
+                extracted = "".join([text[i] for i in range(nn-1, len(text), nn)])
+                print("Extracted:", extracted[:200])
+                print("(If you see the flag, use 'flag' to submit.)")
+            except Exception:
+                print("Usage: extract <n> e.g. extract 7")
+        elif cmd == "hint":
+            print("Try extracting every 7th character (use 'extract 7').")
+        elif cmd == "flag":
+            solved = require_flag(3, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for guidance.")
+
+def level4_interactive(solved_levels):
+    print("\n=== Level 4: Port Authority (TCP password) ===")
+    print("Goal: connect and send the correct password. Commands: connect, send <text>, hint, flag, exit")
+    connected = False
+    PASSWORD = "OPEN SESAME"
+    while True:
+        cmd = input_prompt()
+        if cmd == "connect":
+            connected = True
+            print("Connected to 127.0.0.1:9004. Server: Welcome. Send password:")
+        elif cmd.startswith("send "):
+            if not connected:
+                print("You need to 'connect' first.")
+                continue
+            tosend = cmd.split(" ",1)[1]
+            if tosend == PASSWORD:
+                print("Server:", LEVEL_FLAGS[4])
+            else:
+                print("Server: Authentication failed")
+        elif cmd == "hint":
+            print("Try the phrase that sounds like a magic-password (two words).")
+        elif cmd == "flag":
+            solved = require_flag(4, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for guidance.")
+
+def level5_interactive(solved_levels):
+    print("\n=== Level 5: Hello World, Goodbye Security (eval simulation) ===")
+    print("Goal: the service evaluates small expressions. How could an attacker leak the flag?\n")
+    print("To keep this playground safe, type a specially crafted payload to 'leak' the flag.")
+    print("Commands: eval <expression>, hint, flag, exit\n")
+    # For safety we DO NOT eval user input. We simulate a vulnerable service that would accept a payload 'leak_flag()'.
+    while True:
+        cmd = input_prompt()
+        if cmd.startswith("eval "):
+            expr = cmd.split(" ",1)[1].strip()
+            if "leak_flag" in expr or "get_flag" in expr or "globals()['FLAG']" in expr:
+                print("Service output:", LEVEL_FLAGS[5])
+            else:
+                print("Service output: Expression evaluated result (simulated).")
+        elif cmd == "hint":
+            print("Think: unsafe eval allows access to names/objects. A payload like leak_flag() would return the flag in this simulation.")
+        elif cmd == "flag":
+            solved = require_flag(5, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for guidance.")
+
+def level6_interactive(solved_levels):
+    print("\n=== Level 6: 404 Not Found (hidden HTTP path) ===")
+    print("Goal: find the path that returns the flag. Commands: get <path>, hint, flag, exit\n")
+    SECRET = "/.very_hidden_path_42"
+    while True:
+        cmd = input_prompt()
+        if cmd.startswith("get "):
+            path = cmd.split(" ",1)[1].strip()
+            if path == SECRET:
+                print("HTTP/1.1 200 OK\n\n" + LEVEL_FLAGS[6])
+            else:
+                print("HTTP/1.1 404 Not Found\n\nNot Found")
+        elif cmd == "hint":
+            print("The hidden path starts with a dot and ends with an underscore and 42.")
+        elif cmd == "flag":
+            solved = require_flag(6, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for help.")
+
+def level7_interactive(solved_levels):
+    print("\n=== Level 7: Socket to Me (reverse protocol) ===")
+    print("Goal: send the reversed token to get the flag.\nCommands: send <token>, hint, flag, exit\n")
+    SECRET_TOKEN = "supersecret"
+    while True:
+        cmd = input_prompt()
+        if cmd.startswith("send "):
+            token = cmd.split(" ",1)[1].strip()
+            if token == SECRET_TOKEN[::-1]:
+                print("Server:", LEVEL_FLAGS[7])
+            else:
+                print("Server: Wrong")
+        elif cmd == "hint":
+            print("The server expects the token backwards. Reverse the word 'supersecret'.")
+        elif cmd == "flag":
+            solved = require_flag(7, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for help.")
+
+def level8_interactive(solved_levels):
+    print("\n=== Level 8: Shell We Dance? (command-injection simulation) ===")
+    print("Goal: craft a 'name' parameter that injects a command to read the flag file. This is a simulation; we won't run shell commands.")
+    print("Commands: request name=<value>, hint, flag, exit\n")
+    while True:
+        cmd = input_prompt()
+        if cmd.startswith("request "):
+            body = cmd.split(" ",1)[1]
+            if "cat /flag" in body or "cat __flag_file__" in body or ";" in body:
+                print("Server output:")
+                print(LEVEL_FLAGS[8])
+            else:
+                print("Server output: Hello " + body.split("=",1)[1])
+        elif cmd == "hint":
+            print("Try injecting a command separator like ';' or include 'cat __flag_file__' in the name value. (simulation)")
+        elif cmd == "flag":
+            solved = require_flag(8, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for help.")
+
+def level9_interactive(solved_levels):
+    print("\n=== Level 9: Man in the Middle (proxy log) ===")
+    print("Goal: inspect the proxy.log to find a proxied request that included the flag.")
+    print("Commands: curl /path, viewlog, hint, flag, exit\n")
+    # build proxy.log content
+    proxy_log = b"GET /secret HTTP/1.1\r\nHost: backend\r\n\r\n" + LEVEL_FLAGS[9].encode() + b"\n---\n"
+    while True:
+        cmd = input_prompt()
+        if cmd.startswith("curl "):
+            path = cmd.split(" ",1)[1]
+            if path == "/secret":
+                print("HTTP/1.1 200 OK\n\n" + LEVEL_FLAGS[9])
+            else:
+                print("HTTP/1.1 200 OK\n\nOK")
+        elif cmd == "viewlog":
+            print("proxy.log content:\n")
+            print(proxy_log.decode(errors="replace"))
+        elif cmd == "hint":
+            print("The proxy logs forwarded requests. View the log to find the /secret request.")
+        elif cmd == "flag":
+            solved = require_flag(9, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for guidance.")
+
+def level10_interactive(solved_levels):
+    print("\n=== Level 10: The Ciphered Truth (symmetric cipher puzzle) ===")
+    print("Goal: derive the passphrase hinted and use it to decrypt the ciphertext. Commands: show, decrypt <passphrase>, hint, flag, exit\n")
+    # We'll use simple XOR with key derived from passphrase (sha-like simple hash)
+    def simple_key(p):
+        # deterministic bytes from passphrase (not cryptographically secure - for teaching)
+        b = p.encode('utf-8')
+        key = bytearray(16)
+        for i in range(len(b)):
+            key[i % 16] ^= b[i]
+        return bytes(key)
+    def xor_decrypt(key, data):
+        return bytes([data[i] ^ key[i % len(key)] for i in range(len(data))])
+    flag = LEVEL_FLAGS[10].encode()
+    passphrase = "gama-essentials-2025"
+    key = simple_key(passphrase)
+    ciphertext = base64.b64encode(xor_decrypt(key, flag)).decode()
+    print("Ciphertext (base64):", ciphertext)
+    while True:
+        cmd = input_prompt()
+        if cmd == "show":
+            print("ciphertext (copied above).")
+        elif cmd.startswith("decrypt "):
+            guess = cmd.split(" ",1)[1]
+            k = simple_key(guess)
+            try:
+                dec = xor_decrypt(k, base64.b64decode(ciphertext))
+                if dec.decode().startswith("FLAG{"):
+                    print("Decryption result:", dec.decode())
                 else:
-                    result += char
-            return result
-        
-        encrypted = vigenere_encrypt(plaintext, key)
-        
-        with open('ctf_data/files/cipher.txt', 'w') as f:
-            f.write(f"Encrypted message: {encrypted}\n")
-            f.write(f"Hint: The key was mentioned in stage 3 registry value\n")
-    
-    def setup_stage7(self):
-        """Stage 7: Configuration file analysis"""
-        config = {
-            "application": {
-                "name": "CTF Challenge System",
-                "version": "2.1.4",
-                "debug_mode": False,
-                "database": {
-                    "host": "localhost",
-                    "port": 5432,
-                    "name": "ctf_db"
-                },
-                "developer_notes": {
-                    "last_update": "2024-06-10",
-                    "debug_flag": self.flags['stage7'],
-                    "todo": "Remove debug info before production"
-                }
-            }
-        }
-        
-        with open('ctf_data/files/app_config.json', 'w') as f:
-            json.dump(config, f, indent=2)
-    
-    def setup_stage8(self):
-        """Stage 8: Process memory simulation"""
-        # Create a simple "memory dump" file
-        memory_content = []
-        
-        # Add random memory-like data
-        for _ in range(500):
-            random_data = ''.join(random.choices(string.ascii_letters + string.digits, k=64))
-            memory_content.append(random_data)
-        
-        # Insert flag in the middle
-        flag_pos = random.randint(100, 400)
-        memory_content.insert(flag_pos, f"PROC_CTF_Worker_Memory_Section: {self.flags['stage8']}")
-        
-        with open('ctf_data/files/memory_dump.txt', 'w') as f:
-            f.write('\n'.join(memory_content))
-    
-    def setup_stage9(self):
-        """Stage 9: Reverse engineering simulation"""
-        # Create a simple "binary" analysis file with strings
-        binary_strings = [
-            "Usage: program.exe [options]",
-            "Error: Invalid parameter",
-            "Initializing system...",
-            "Loading configuration",
-            f"Debug_String_Key: {self.flags['stage9']}",
-            "Process completed successfully",
-            "Version 1.2.3 Build 456"
-        ]
-        
-        with open('ctf_data/binary/strings_output.txt', 'w') as f:
-            f.write("Strings found in binary:\n")
-            f.write("=" * 30 + "\n")
-            for s in binary_strings:
-                f.write(f"{s}\n")
-    
-    def start_flask_server(self):
-        """Start the Flask web server in a separate thread"""
-        def run_flask():
-            self.flask_app.run(host='127.0.0.1', port=5000, debug=False)
-        
-        flask_thread = threading.Thread(target=run_flask)
-        flask_thread.daemon = True
-        flask_thread.start()
-    
-    def handle_client(self, client_socket, address):
-        """Handle individual client connections"""
-        print(f"New connection from {address}")
-        
-        try:
-            while True:
-                data = client_socket.recv(1024).decode('utf-8')
-                if not data:
+                    print("Decryption result (invalid):", dec)
+            except Exception as e:
+                print("Decryption failed:", e)
+        elif cmd == "hint":
+            print("Passphrase starts with 'gama' and ends with '2025'.")
+        elif cmd == "flag":
+            solved = require_flag(10, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for help.")
+
+def level11_interactive(solved_levels):
+    print("\n=== Level 11: Kernel Panic (checksum puzzle) ===")
+    print("Goal: send a 4-byte integer whose byte-sum mod 256 equals 0x2A (42). Commands: send <hex4bytes>, hint, flag, exit\n")
+    def checksum(n):
+        s = 0
+        for b in n.to_bytes(4, 'big'):
+            s = (s + b) & 0xFF
+        return s
+    while True:
+        cmd = input_prompt()
+        if cmd.startswith("send "):
+            hx = cmd.split(" ",1)[1].strip()
+            try:
+                if hx.startswith("0x"): hx = hx[2:]
+                if len(hx) != 8:
+                    print("Provide 4 bytes as 8 hex chars, e.g. 0x01020304 or 0x0000002A")
+                    continue
+                val = int(hx,16)
+                if checksum(val) == 0x2A:
+                    print("Server:", LEVEL_FLAGS[11])
+                else:
+                    print("Server: Try again (checksum mismatch).")
+            except Exception as e:
+                print("Bad input:", e)
+        elif cmd == "hint":
+            print("Find bytes b0+b1+b2+b3 = 42 (mod 256). For example 0x0000002A works.")
+        elif cmd == "flag":
+            solved = require_flag(11, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for help.")
+
+def level15_interactive(solved_levels):
+    print("\n=== Level 15: Command & Conquer (unsafe-deserialization simulation) ===")
+    print("Goal: craft a serialization payload that would cause the server to read a flag file. This is a simulation - do not run unsafe deserialization in real life.")
+    print("Commands: send <payload>, hint, flag, exit\n")
+    # We'll accept a payload string that contains 'OPEN_FLAG_FILE' sequence.
+    while True:
+        cmd = input_prompt()
+        if cmd.startswith("send "):
+            payload = cmd.split(" ",1)[1]
+            if "OPEN_FLAG_FILE" in payload or "read_flag" in payload or "os.system('cat __flag_file__')" in payload:
+                print("Server: Deserialized object triggered file-read. Output:")
+                print(LEVEL_FLAGS[15])
+            else:
+                print("Server: Deserialization OK. No interesting behavior.")
+        elif cmd == "hint":
+            print("In real CTFs you'd craft a pickle/gadget payload. Here include the marker OPEN_FLAG_FILE in your payload string.")
+        elif cmd == "flag":
+            solved = require_flag(15, solved_levels)
+            return solved
+        elif cmd == "exit":
+            return False
+        else:
+            print("Unknown command. Type 'hint' for help.")
+
+
+LEVEL_FUNCTIONS = {
+    1: level1_interactive,
+    2: level2_interactive,
+    3: level3_interactive,
+    4: level4_interactive,
+    5: level5_interactive,
+    6: level6_interactive,
+    7: level7_interactive,
+    8: level8_interactive,
+    9: level9_interactive,
+    10: level10_interactive,
+    11: level11_interactive,
+    15: level15_interactive,
+}
+
+def main():
+    print("Welcome to the single-file CTF game (Levels 1-11, 15).")
+    print("Progress will be saved in", PROGRESS_FILE)
+    current_level, solved_levels = load_progress()
+    # levels order: 1..11 then 15
+    order = [1,2,3,4,5,6,7,8,9,10,11,15]
+    # find starting index
+    try:
+        idx = order.index(current_level)
+    except ValueError:
+        idx = 0
+        current_level = order[0]
+    while idx < len(order):
+        lvl = order[idx]
+        print(f"\n=== AVAILABLE LEVEL: {lvl} === (Solved levels: {sorted(list(solved_levels))})")
+        print("Type 'play' to start the level, 'skip' to skip (only for testing), 'quit' to exit, or 'reset' to restart progress.")
+        cmd = input_prompt()
+        if cmd == "play":
+            solved = LEVEL_FUNCTIONS[lvl](solved_levels)
+            if solved:
+                # advance to next level
+                idx += 1
+                if idx < len(order):
+                    current_level = order[idx]
+                    save_progress(current_level, list(solved_levels))
+                    print(f"Next level unlocked: {current_level}")
+                else:
+                    print("Congratulations! You completed all included levels.")
+                    save_progress(order[-1], list(solved_levels))
                     break
-                
-                try:
-                    request = json.loads(data)
-                    response = self.process_request(request, address[0])
-                    client_socket.send(json.dumps(response).encode('utf-8'))
-                except json.JSONDecodeError:
-                    error_response = {"status": "error", "message": "Invalid JSON format"}
-                    client_socket.send(json.dumps(error_response).encode('utf-8'))
-                    
-        except Exception as e:
-            print(f"Error handling client {address}: {e}")
-        finally:
-            client_socket.close()
-            print(f"Connection closed: {address}")
-    
-    def process_request(self, request, client_ip):
-        """Process client requests"""
-        action = request.get('action')
-        stage = request.get('stage')
-        
-        if action == 'get_challenge':
-            return self.get_challenge_info(stage)
-        elif action == 'submit_flag':
-            return self.verify_flag(request.get('flag'), stage, client_ip)
-        elif action == 'get_progress':
-            return self.get_user_progress(client_ip)
-        elif action == 'get_hint':
-            return self.get_hint(stage)
+            else:
+                print("Returning to main menu. You can try the level again later.")
+                save_progress(lvl, list(solved_levels))
+        elif cmd == "skip":
+            print("Skipping (test mode). Marking level solved.")
+            solved_levels.add(lvl)
+            idx += 1
+            if idx < len(order):
+                current_level = order[idx]
+                save_progress(current_level, list(solved_levels))
+        elif cmd == "reset":
+            print("Resetting progress...")
+            solved_levels.clear()
+            idx = 0
+            current_level = order[0]
+            save_progress(current_level, list(solved_levels))
+        elif cmd == "quit":
+            print("Exiting. Progress saved.")
+            save_progress(lvl, list(solved_levels))
+            break
         else:
-            return {"status": "error", "message": "Unknown action"}
-    
-    def get_challenge_info(self, stage):
-        """Get challenge information for a specific stage"""
-        challenges = {
-            1: {
-                "title": "Stage 1: Entry Door (Hosts File)",
-                "description": "The flag is located at http://secret.ctf.local/ - but the domain doesn't resolve normally...",
-                "type": "System Manipulation",
-                "hint": "Check your system's hosts file configuration"
-            },
-            2: {
-                "title": "Stage 2: Log Analysis",
-                "description": "Find the hidden flag in the application log file at ctf_data/logs/application.log",
-                "type": "Forensics",
-                "hint": "Look for unusual error messages or debug information"
-            },
-            3: {
-                "title": "Stage 3: Registry Hunt",
-                "description": "Find the secret key in the simulated registry file ctf_data/registry_sim.json",
-                "type": "System Analysis",
-                "hint": "Look under HKEY_CURRENT_USER\\SOFTWARE\\CTF_Simulation"
-            },
-            4: {
-                "title": "Stage 4: Web Injection",
-                "description": "Exploit the search functionality at http://127.0.0.1:5000/search",
-                "type": "Web Exploitation",
-                "hint": "Try template injection techniques"
-            },
-            5: {
-                "title": "Stage 5: Hidden Messages (Steganography)",
-                "description": "Extract the hidden message from ctf_data/files/message.txt",
-                "type": "Steganography",
-                "hint": "Not all whitespace is created equal"
-            },
-            6: {
-                "title": "Stage 6: Cipher Challenge",
-                "description": "Decrypt the message in ctf_data/files/cipher.txt",
-                "type": "Cryptography",
-                "hint": "The key might be found in a previous stage"
-            },
-            7: {
-                "title": "Stage 7: Configuration Secrets",
-                "description": "Find the debug flag in ctf_data/files/app_config.json",
-                "type": "File Analysis",
-                "hint": "Developers sometimes leave debug information"
-            },
-            8: {
-                "title": "Stage 8: Memory Forensics",
-                "description": "Analyze the memory dump in ctf_data/files/memory_dump.txt",
-                "type": "Forensics",
-                "hint": "Look for process-specific memory sections"
-            },
-            9: {
-                "title": "Stage 9: Reverse Engineering",
-                "description": "Find the debug string in ctf_data/binary/strings_output.txt",
-                "type": "Reverse Engineering",
-                "hint": "Binary analysis often reveals embedded strings"
-            },
-            10: {
-                "title": "Stage 10: Final Challenge",
-                "description": "Combine information from previous stages to get the final flag",
-                "type": "Integration",
-                "hint": "SHA256 hash of concatenated stage 3 + stage 6 keys (lowercase)"
-            }
-        }
-        
-        if stage in challenges:
-            return {"status": "success", "challenge": challenges[stage]}
-        else:
-            return {"status": "error", "message": "Invalid stage number"}
-    
-    def verify_flag(self, submitted_flag, stage, client_ip):
-        """Verify submitted flags"""
-        if client_ip not in self.user_progress:
-            self.user_progress[client_ip] = {"completed_stages": [], "score": 0}
-        
-        correct_flag = None
-        
-        if stage == 10:
-            # Final stage: SHA256 of stage3 + stage6 flags
-            combined = (self.flags['stage3'] + self.flags['stage6']).lower()
-            correct_flag = "CTF{" + hashlib.sha256(combined.encode()).hexdigest()[:16] + "}"
-        else:
-            flag_key = f'stage{stage}'
-            correct_flag = self.flags.get(flag_key)
-        
-        if correct_flag and submitted_flag == correct_flag:
-            if stage not in self.user_progress[client_ip]["completed_stages"]:
-                self.user_progress[client_ip]["completed_stages"].append(stage)
-                self.user_progress[client_ip]["score"] += 100
-            
-            return {
-                "status": "success", 
-                "message": f"Correct! Stage {stage} completed!",
-                "next_stage": stage + 1 if stage < 10 else None
-            }
-        else:
-            return {"status": "error", "message": "Incorrect flag"}
-    
-    def get_user_progress(self, client_ip):
-        """Get user progress"""
-        if client_ip not in self.user_progress:
-            self.user_progress[client_ip] = {"completed_stages": [], "score": 0}
-        
-        progress = self.user_progress[client_ip]
-        return {
-            "status": "success",
-            "completed_stages": sorted(progress["completed_stages"]),
-            "score": progress["score"],
-            "total_stages": 10
-        }
-    
-    def get_hint(self, stage):
-        """Get additional hints for stages"""
-        hints = {
-            1: "Add '127.0.0.1 secret.ctf.local' to your hosts file",
-            2: "Use grep or find to search for 'CTF{' in the log file",
-            3: "Navigate through the JSON structure to find SecretKeyPart1",
-            4: "Try injecting {{flag}} in the search box",
-            5: "Check for hidden characters between visible text",
-            6: "Use 'SECRET' as the Vigenère cipher key",
-            7: "Look in the developer_notes section",
-            8: "Search for 'CTF_Worker' in the memory dump",
-            9: "Look for strings containing 'Debug_String_Key'",
-            10: "Calculate SHA256 of: SecretPart123ctf{c1ph3r_m4st3r}"
-        }
-        
-        return {
-            "status": "success",
-            "hint": hints.get(stage, "No hint available for this stage")
-        }
-    
-    def start_server(self):
-        """Start the main CTF server"""
-        # Start Flask server first
-        self.start_flask_server()
-        time.sleep(1)  # Give Flask time to start
-        
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        
-        try:
-            server_socket.bind((self.host, self.port))
-            server_socket.listen(5)
-            print(f"CTF Server started on {self.host}:{self.port}")
-            print(f"Web challenges available at http://127.0.0.1:5000")
-            print("Server is ready for connections...")
-            
-            while True:
-                client_socket, address = server_socket.accept()
-                client_thread = threading.Thread(
-                    target=self.handle_client,
-                    args=(client_socket, address)
-                )
-                client_thread.daemon = True
-                client_thread.start()
-                
-        except KeyboardInterrupt:
-            print("\nServer shutting down...")
-        finally:
-            server_socket.close()
+            print("Unknown command. Type 'play', 'skip', 'reset', or 'quit'.")
 
 if __name__ == "__main__":
-    server = CTFServer()
-    server.start_server()
+    main()
+    
+
